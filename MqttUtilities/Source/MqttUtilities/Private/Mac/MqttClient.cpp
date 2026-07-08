@@ -14,6 +14,19 @@ void UMqttClient::BeginDestroy()
 	{
 		Task->StopRunning();
 	}
+	// Arrêt SYNCHRONE : joindre + détruire le thread worker avant la destruction de l'objet
+	// (sinon le thread MQTT survit -> hang/zombie du process à la fermeture du jeu).
+	if (Thread != nullptr)
+	{
+		Thread->Kill(true); // attend la fin de FMqttRunnable::Run()
+		delete Thread;
+		Thread = nullptr;
+	}
+	if (Task != nullptr)
+	{
+		delete Task;
+		Task = nullptr;
+	}
 }
 
 void UMqttClient::Connect(FMqttConnectionData connectionData, const FOnConnectDelegate& onConnectCallback)
@@ -59,7 +72,18 @@ void UMqttClient::Disconnect(const FOnDisconnectDelegate& onDisconnectCallback)
 		Task->StopRunning();
 	}
 
-	Task = nullptr;
+	// Arrêt SYNCHRONE : joindre + détruire le thread avant de lâcher le Task (évite fuite + use-after-free).
+	if (Thread != nullptr)
+	{
+		Thread->Kill(true); // attend la fin de FMqttRunnable::Run()
+		delete Thread;
+		Thread = nullptr;
+	}
+	if (Task != nullptr)
+	{
+		delete Task;
+		Task = nullptr;
+	}
 }
 
 void UMqttClient::Subscribe(FString topic, int qos)
